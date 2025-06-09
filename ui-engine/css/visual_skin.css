@@ -1,0 +1,14 @@
+body {
+  background-color: #101010;
+  font-family: 'Arial', sans-serif;
+  color: #fff;
+}
+.card {
+  background: #1c1c1c;
+  border: 1px solid #333;
+  padding: 16px;
+  border-radius: 8px;
+}
+.card:hover {
+  border-color: #555;
+}
