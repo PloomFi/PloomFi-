@@ -1,6 +1,7 @@
-import fetch from "node-fetch"
+import fetch, { RequestInit } from "node-fetch"
 import { EventEmitter } from "events"
 import { z } from "zod"
+import get from "lodash/get"
 
 /**
  * Configuration for API polling
@@ -29,9 +30,9 @@ export type PollParams = z.infer<typeof pollParamsSchema>
 /**
  * Event payload for each successful fetch
  */
-export interface ApiDataEvent {
+export interface ApiDataEvent<T = unknown> {
   timestamp: number
-  data: unknown
+  data: T
 }
 
 /**
@@ -53,47 +54,54 @@ export class ApiWatcherService extends EventEmitter {
   }
 
   /**
-   * Start polling the API. Emits "data" on each successful fetch.
+   * Start polling the API. Emits:
+   *  - "start"
+   *  - "data" with ApiDataEvent
+   *  - "error" with Error
    */
   public start(rawParams?: unknown): void {
-    const { query }: PollParams = rawParams
+    if (this.poller) return
+
+    const { query } = rawParams
       ? pollParamsSchema.parse(rawParams)
       : { query: undefined }
 
-    const buildUrl = () => {
+    const buildUrl = (): string => {
       if (!query) return this.url
       const u = new URL(this.url)
       Object.entries(query).forEach(([k, v]) => u.searchParams.set(k, v))
       return u.toString()
     }
 
-    if (this.poller) return
-    this.poller = setInterval(async () => {
+    const doFetch = async () => {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), this.intervalMs - 100)
       try {
-        const res = await fetch(buildUrl(), { method: "GET", timeout: this.intervalMs - 100 })
+        const res = await fetch(buildUrl(), {
+          method: "GET",
+          signal: controller.signal,
+        } as RequestInit)
+        clearTimeout(timeout)
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
         let payload = await res.json()
         if (this.jsonPath) {
-          for (const segment of this.jsonPath.split(".")) {
-            if (payload == null) break
-            payload = payload[segment]
-          }
+          payload = get(payload, this.jsonPath)
         }
         this.emit("data", { timestamp: Date.now(), data: payload } as ApiDataEvent)
       } catch (err) {
-        this.emit("error", err)
+        this.emit("error", err instanceof Error ? err : new Error(String(err)))
       }
-    }, this.intervalMs)
+    }
 
     // immediate first fetch
-    ;(async () => {
-      if (!this.poller) return
-      this.emit("start")
-    })()
+    this.emit("start")
+    doFetch()
+
+    this.poller = setInterval(doFetch, this.intervalMs)
   }
 
   /**
-   * Stop polling the API.
+   * Stop polling the API. Emits "stopped"
    */
   public stop(): void {
     if (this.poller) {
