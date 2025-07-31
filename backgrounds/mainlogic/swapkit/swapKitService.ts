@@ -1,4 +1,4 @@
-import fetch from "node-fetch"
+import fetch, { RequestInit } from "node-fetch"
 import { Connection, PublicKey, Transaction, ConfirmOptions } from "@solana/web3.js"
 import { z } from "zod"
 import {
@@ -11,89 +11,113 @@ import {
   SwapQuote,
   SwapExecution,
 } from "./defineSwapKitShape"
+import { createLogger, format, transports } from "winston"
 
-/**
- * SwapKitService provides quoting and execution for token swaps.
- */
+const logger = createLogger({
+  level: "info",
+  format: format.combine(
+    format.timestamp(),
+    format.printf(({ timestamp, level, message }) => `${timestamp} [${level}]: ${message}`)
+  ),
+  transports: [new transports.Console()],
+})
+
+const RETRY_COUNT = 2
+
 export class SwapKitService {
-  private readonly config: SwapKitConfig
-  private readonly connection: Connection
+  private config: SwapKitConfig
+  private connection: Connection
 
   constructor(rawConfig: unknown) {
-    this.config = swapKitConfigSchema.parse(rawConfig)
-    this.connection = new Connection(this.config.endpoint, this.config.commitment as ConfirmOptions)
+    const parsed = swapKitConfigSchema.safeParse(rawConfig)
+    if (!parsed.success) {
+      logger.error("Invalid SwapKitConfig", parsed.error.format())
+      throw new Error("Invalid configuration")
+    }
+    this.config = parsed.data
+    this.connection = new Connection(
+      this.config.endpoint,
+      this.config.commitment as ConfirmOptions
+    )
   }
 
-  /**
-   * Fetch the best swap quote from external or on-chain aggregator.
-   */
+  private async fetchWithRetry(url: string, opts: RequestInit): Promise<any> {
+    for (let attempt = 1; attempt <= RETRY_COUNT; attempt++) {
+      try {
+        const res = await fetch(url, opts)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return await res.json()
+      } catch (err: any) {
+        logger.warn(`Fetch attempt ${attempt} failed: ${err.message}`)
+        if (attempt === RETRY_COUNT) throw err
+      }
+    }
+  }
+
   public async getQuote(rawParams: unknown): Promise<SwapQuote> {
-    const { inputMint, outputMint, amountIn }: QuoteParams = quoteParamsSchema.parse(rawParams)
+    const params = quoteParamsSchema.parse(rawParams) as QuoteParams
     const url = new URL(`${this.config.endpoint}/quote`)
-    url.searchParams.set("in", inputMint)
-    url.searchParams.set("out", outputMint)
-    url.searchParams.set("amt", amountIn.toString())
+    url.searchParams.set("in", params.inputMint)
+    url.searchParams.set("out", params.outputMint)
+    url.searchParams.set("amt", params.amountIn.toString())
     if (this.config.apiKey) url.searchParams.set("apiKey", this.config.apiKey)
 
-    const res = await fetch(url.toString(), { method: "GET", timeout: this.config.timeoutMs })
-    if (!res.ok) throw new Error(`Quote API error ${res.status}: ${res.statusText}`)
-    const data = (await res.json()) as any
+    logger.info(`Requesting quote: ${url.toString()}`)
+    const data = await this.fetchWithRetry(url.toString(), {
+      method: "GET",
+      timeout: this.config.timeoutMs,
+    })
 
     return {
       bestRoute: data.route,
-      amountOut: data.amountOut,
-      estimatedFee: data.fee,
-      slippagePct: data.slippage,
+      amountOut: Number(data.amountOut),
+      estimatedFee: Number(data.fee),
+      slippagePct: Number(data.slippage),
       timestamp: Date.now(),
     }
   }
 
-  /**
-   * Execute the swap on‐chain using provided parameters.
-   */
   public async executeSwap(rawParams: unknown): Promise<SwapExecution> {
-    const {
-      inputMint,
-      outputMint,
-      amountIn,
-      minAmountOut,
-      userAddress,
-      feePayerAddress,
-    }: SwapParams = swapParamsSchema.parse(rawParams)
+    const { inputMint, outputMint, amountIn, minAmountOut, userAddress, feePayerAddress } =
+      swapParamsSchema.parse(rawParams) as SwapParams
 
     const userKey = new PublicKey(userAddress)
     const feePayerKey = feePayerAddress ? new PublicKey(feePayerAddress) : userKey
+    const programId = new PublicKey(this.config.programId) // from config
 
-    // Build the swap transaction via on‐chain program (placeholder)
-    const tx = new Transaction()
-      // add instructions here for token approval, swap, etc.
-      .add({
+    // Build transaction (example uses SPL Token Program)
+    const tx = new Transaction().add(
+      // placeholder: replace with real instruction builder
+      {
         keys: [],
-        programId: new PublicKey(inputMint), // placeholder: real DEX program ID
+        programId,
         data: Buffer.alloc(0),
-      })
-
+      }
+    )
     tx.feePayer = feePayerKey
-    const { blockhash } = await this.connection.getLatestBlockhash(this.config.commitment as ConfirmOptions)
+    const { blockhash } = await this.connection.getLatestBlockhash(
+      this.config.commitment as ConfirmOptions
+    )
     tx.recentBlockhash = blockhash
 
-    // In real use, send tx to wallet for signing
-    const signedTx = await (tx as any).sign(userKey) as Transaction
-    const signature = await this.connection.sendRawTransaction(signedTx.serialize())
-    const status = await this.connection.confirmTransaction(signature, this.config.commitment as ConfirmOptions)
+    logger.info(`Signing transaction for ${inputMint}→${outputMint}`)
+    const signedTx = await (tx as any).sign(userKey)
+    const raw = signedTx.serialize()
+    const signature = await this.connection.sendRawTransaction(raw)
+    const confirmation = await this.connection.confirmTransaction(
+      signature,
+      this.config.commitment as ConfirmOptions
+    )
 
-    // parse actual executed amounts from logs or events (placeholder values)
-    const amountOut = minAmountOut
-    const fee = 0
-
+    logger.info(`Swap executed, signature ${signature}`)
     return {
       signature,
-      slot: status.value?.slot ?? -1,
+      slot: confirmation.value?.slot ?? -1,
       inputMint,
       outputMint,
       amountIn,
-      amountOut,
-      fee,
+      amountOut: minAmountOut, // to adjust from logs in real impl
+      fee: 0,
       timestamp: Date.now(),
     }
   }
