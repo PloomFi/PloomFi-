@@ -9,9 +9,7 @@ import {
   DispatchResult,
 } from "./defineSendLogicShape"
 
-/**
- * SendLogicService dispatches logic executions to a remote endpoint
- */
+
 export class SendLogicService extends EventEmitter {
   private readonly endpoint: string
   private readonly apiKey: string
@@ -26,10 +24,7 @@ export class SendLogicService extends EventEmitter {
     this.timeoutMs = timeoutMs
   }
 
-  /**
-   * Dispatch a logic execution
-   * Emits "dispatchStart", "dispatchResult", and "dispatchError"
-   */
+ 
   public async dispatch(rawParams: unknown): Promise<DispatchResult> {
     const { logicId, payload }: LogicDispatchParams =
       logicDispatchParamsSchema.parse(rawParams)
