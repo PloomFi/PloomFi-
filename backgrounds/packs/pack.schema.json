@@ -1,11 +1,15 @@
 {
   "auditReportId": "selka_audit_20250628_042",
+  "schemaVersion": "1.1",
   "scannedAt": "2025-06-28T12:25:00Z",
+
   "subjectWallet": {
+    "chain": "solana",
     "address": "FJt8xk3qAsy3BGNq9YqTrRZ12eXbwV5rWh2hkShx9N3v",
     "labels": ["⚠️ suspect", "⚡️high_activity"],
     "firstActivity": "2025-06-19T07:12:00Z"
   },
+
   "snapshot": {
     "txCount_24h": 312,
     "tokensTouched": 18,
@@ -13,28 +17,54 @@
     "bridgeUsage": [],
     "volumeMoved_SOL": 1987.43
   },
+
   "behaviors": [
     {
+      "code": "TOKEN_SEEDER",
       "label": "Token Seeder",
-      "detail": "Created 3 new tokens within the last 24h"
+      "detail": "Created 3 new tokens within the last 24h",
+      "severity": "medium"
     },
     {
+      "code": "BRIDGE_LOOPER",
       "label": "Bridge Looper",
-      "detail": "Multiple inbound/outbound bridge flows detected in tight intervals"
+      "detail": "Multiple inbound/outbound bridge flows detected in tight intervals",
+      "severity": "high"
     },
     {
+      "code": "BURST_TRANSFERS",
       "label": "Burst Transfers",
-      "detail": "Over 300 txs in 24h — automated or scripted behavior likely"
+      "detail": "Over 300 txs in 24h — automated or scripted behavior likely",
+      "severity": "high"
     }
   ],
+
   "flags": {
     "tokenCreationSpike": true,
     "bridgeCycling": true,
     "spamRiskDetected": true
   },
+
   "selkaScore": {
     "threatLevel": "Elevated",
     "numericScore": 87,
+    "normalizedScore01": 0.87,
+    "band": "High",
     "advisory": "Flag for active watch. Throttle transfers if supported"
-  }
+  },
+
+  "derived": {
+    "txRatePerHour": 13.0,
+    "isHighActivity": true,
+    "isSuspect": true,
+    "hasBridgeBehavior": true,
+    "hasTokenCreationSpike": true
+  },
+
+  "recommendations": [
+    "Place wallet on active watchlist for the next 24h",
+    "Throttle or require manual approval for outbound transfers > 100 SOL",
+    "Increase bridge-related anomaly sensitivity for this wallet",
+    "Auto-quarantine newly spawned tokens for review before listing"
+  ]
 }
