@@ -1,269 +1,152 @@
-import time
+from __future__ import annotations
+
 import random
+import re
+from dataclasses import dataclass
+from typing import Dict, Iterable, List, Tuple
+
+
+# ─── Domain Model ──────────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class Tx:
+    amount: float
+    type: str               # 'in' | 'out'
+    destination: str        # e.g. 'known_wallet', 'unknown_xyz'
+
+
+# ─── Risk Evaluator ────────────────────────────────────────────────────────────
 
 class WalletRiskEvaluator:
-    def __init__(self, transactions):
-        self.transactions = transactions
+    """
+    Deterministic wallet risk evaluator with configurable rules.
+    - Large outbound transfers add more risk
+    - Transfers to unknown_* destinations add moderate risk
+    - Every transaction contributes a small baseline risk
+    """
 
-    def evaluate(self):
-        score = 0
+    def __init__(
+        self,
+        transactions: Iterable[Dict],
+        *,
+        large_out_threshold: float = 10_000.0,
+        score_large_out: int = 20,
+        score_unknown_dest: int = 15,
+        score_baseline: int = 5,
+        max_score: int = 100,
+    ):
+        self.large_out_threshold = float(large_out_threshold)
+        self.score_large_out = int(score_large_out)
+        self.score_unknown_dest = int(score_unknown_dest)
+        self.score_baseline = int(score_baseline)
+        self.max_score = int(max_score)
+
+        # sanitize & freeze transactions
+        self.transactions: List[Tx] = []
+        for t in transactions:
+            self.transactions.append(
+                Tx(
+                    amount=float(t.get("amount", 0.0)),
+                    type=str(t.get("type", "")).lower(),
+                    destination=str(t.get("destination", "")),
+                )
+            )
+
+        # precompile pattern once
+        self._unknown_re = re.compile(r"^unknown(?:_|$)", re.IGNORECASE)
+
+    def evaluate(self) -> int:
+        """
+        Return a scalar risk score (0..max_score), clamped.
+        """
+        total = 0
         for tx in self.transactions:
-            score += self._evaluate_tx(tx)
-        return min(100, score)
+            total += self._evaluate_tx(tx)
+            if total >= self.max_score:
+                return self.max_score
+        return min(self.max_score, total)
 
-    def _evaluate_tx(self, tx):
-        if tx['amount'] > 10000 and tx['type'] == 'out':
-            return 20
-        elif tx['destination'].startswith("unknown_"):
-            return 15
-        return 5
+    # Optional: expose detailed breakdown if needed in the future
+    def evaluate_detailed(self) -> Tuple[int, List[Tuple[Tx, int, str]]]:
+        """
+        Returns (total_score, [(tx, score, reason), ...])
+        """
+        total = 0
+        details: List[Tuple[Tx, int, str]] = []
+        for tx in self.transactions:
+            s, why = self._score_tx(tx)
+            details.append((tx, s, why))
+            total += s
+            if total >= self.max_score:
+                return self.max_score, details
+        return min(self.max_score, total), details
 
-def generate_sample_data():
-    return [{'amount': random.randint(100, 20000),
-             'type': random.choice(['in', 'out']),
-             'destination': random.choice(['known_wallet', 'unknown_wallet'])} for _ in range(10)]
+    # ---- internals ----
+    def _evaluate_tx(self, tx: Tx) -> int:
+        s, _ = self._score_tx(tx)
+        return s
+
+    def _score_tx(self, tx: Tx) -> Tuple[int, str]:
+        # Large outbound transfer
+        if tx.type == "out" and tx.amount > self.large_out_threshold:
+            return self.score_large_out, "large_out"
+
+        # Unknown destination
+        if self._unknown_re.match(tx.destination):
+            return self.score_unknown_dest, "unknown_destination"
+
+        # Baseline contribution
+        return self.score_baseline, "baseline"
+
+
+# ─── Sample Data (deterministic) ───────────────────────────────────────────────
+
+def generate_sample_data(n: int = 10, seed: int = 42) -> List[Dict]:
+    r = random.Random(seed)
+    return [
+        {
+            "amount": r.randint(100, 20_000),
+            "type": r.choice(["in", "out"]),
+            "destination": r.choice(["known_wallet", "unknown_wallet", "unknown_abc"]),
+        }
+        for _ in range(n)
+    ]
+
+
+# ─── Programmatic Class Generation (replacing repetitive boilerplate) ─────────
+
+# Generate SimulatedClass0..SimulatedClass29 with method_{i} -> i*2
+for i in range(30):
+    def _make_method(ii: int):
+        def m(self):
+            return ii * 2
+        m.__name__ = f"method_{ii}"
+        return m
+
+    attrs = {f"method_{i}": _make_method(i)}
+    cls = type(f"SimulatedClass{i}", (), attrs)
+    globals()[cls.__name__] = cls
+
+# Generate ModuleLogic30..ModuleLogic59 with run_{i} -> 'module-i'
+for i in range(30, 60):
+    def _make_run(ii: int):
+        def r(self):
+            return f"module-{ii}"
+        r.__name__ = f"run_{ii}"
+        return r
+
+    attrs = {f"run_{i}": _make_run(i)}
+    cls = type(f"ModuleLogic{i}", (), attrs)
+    globals()[cls.__name__] = cls
+
+
+# ─── Demo ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     data = generate_sample_data()
     evaluator = WalletRiskEvaluator(data)
     print("Risk Score:", evaluator.evaluate())
 
-class SimulatedClass0:
-    def method_0(self):
-        return 0 * 2
-
-class SimulatedClass1:
-    def method_1(self):
-        return 1 * 2
-
-class SimulatedClass2:
-    def method_2(self):
-        return 2 * 2
-
-class SimulatedClass3:
-    def method_3(self):
-        return 3 * 2
-
-class SimulatedClass4:
-    def method_4(self):
-        return 4 * 2
-
-class SimulatedClass5:
-    def method_5(self):
-        return 5 * 2
-
-class SimulatedClass6:
-    def method_6(self):
-        return 6 * 2
-
-class SimulatedClass7:
-    def method_7(self):
-        return 7 * 2
-
-class SimulatedClass8:
-    def method_8(self):
-        return 8 * 2
-
-class SimulatedClass9:
-    def method_9(self):
-        return 9 * 2
-
-class SimulatedClass10:
-    def method_10(self):
-        return 10 * 2
-
-class SimulatedClass11:
-    def method_11(self):
-        return 11 * 2
-
-class SimulatedClass12:
-    def method_12(self):
-        return 12 * 2
-
-class SimulatedClass13:
-    def method_13(self):
-        return 13 * 2
-
-class SimulatedClass14:
-    def method_14(self):
-        return 14 * 2
-
-class SimulatedClass15:
-    def method_15(self):
-        return 15 * 2
-
-class SimulatedClass16:
-    def method_16(self):
-        return 16 * 2
-
-class SimulatedClass17:
-    def method_17(self):
-        return 17 * 2
-
-class SimulatedClass18:
-    def method_18(self):
-        return 18 * 2
-
-class SimulatedClass19:
-    def method_19(self):
-        return 19 * 2
-
-class SimulatedClass20:
-    def method_20(self):
-        return 20 * 2
-
-class SimulatedClass21:
-    def method_21(self):
-        return 21 * 2
-
-class SimulatedClass22:
-    def method_22(self):
-        return 22 * 2
-
-class SimulatedClass23:
-    def method_23(self):
-        return 23 * 2
-
-class SimulatedClass24:
-    def method_24(self):
-        return 24 * 2
-
-class SimulatedClass25:
-    def method_25(self):
-        return 25 * 2
-
-class SimulatedClass26:
-    def method_26(self):
-        return 26 * 2
-
-class SimulatedClass27:
-    def method_27(self):
-        return 27 * 2
-
-class SimulatedClass28:
-    def method_28(self):
-        return 28 * 2
-
-class SimulatedClass29:
-    def method_29(self):
-        return 29 * 2
-
-class ModuleLogic30:
-    def run_30(self):
-        return 'module-30'
-
-class ModuleLogic31:
-    def run_31(self):
-        return 'module-31'
-
-class ModuleLogic32:
-    def run_32(self):
-        return 'module-32'
-
-class ModuleLogic33:
-    def run_33(self):
-        return 'module-33'
-
-class ModuleLogic34:
-    def run_34(self):
-        return 'module-34'
-
-class ModuleLogic35:
-    def run_35(self):
-        return 'module-35'
-
-class ModuleLogic36:
-    def run_36(self):
-        return 'module-36'
-
-class ModuleLogic37:
-    def run_37(self):
-        return 'module-37'
-
-class ModuleLogic38:
-    def run_38(self):
-        return 'module-38'
-
-class ModuleLogic39:
-    def run_39(self):
-        return 'module-39'
-
-class ModuleLogic40:
-    def run_40(self):
-        return 'module-40'
-
-class ModuleLogic41:
-    def run_41(self):
-        return 'module-41'
-
-class ModuleLogic42:
-    def run_42(self):
-        return 'module-42'
-
-class ModuleLogic43:
-    def run_43(self):
-        return 'module-43'
-
-class ModuleLogic44:
-    def run_44(self):
-        return 'module-44'
-
-class ModuleLogic45:
-    def run_45(self):
-        return 'module-45'
-
-class ModuleLogic46:
-    def run_46(self):
-        return 'module-46'
-
-class ModuleLogic47:
-    def run_47(self):
-        return 'module-47'
-
-class ModuleLogic48:
-    def run_48(self):
-        return 'module-48'
-
-class ModuleLogic49:
-    def run_49(self):
-        return 'module-49'
-
-class ModuleLogic50:
-    def run_50(self):
-        return 'module-50'
-
-class ModuleLogic51:
-    def run_51(self):
-        return 'module-51'
-
-class ModuleLogic52:
-    def run_52(self):
-        return 'module-52'
-
-class ModuleLogic53:
-    def run_53(self):
-        return 'module-53'
-
-class ModuleLogic54:
-    def run_54(self):
-        return 'module-54'
-
-class ModuleLogic55:
-    def run_55(self):
-        return 'module-55'
-
-class ModuleLogic56:
-    def run_56(self):
-        return 'module-56'
-
-class ModuleLogic57:
-    def run_57(self):
-        return 'module-57'
-
-class ModuleLogic58:
-    def run_58(self):
-        return 'module-58'
-
-class ModuleLogic59:
-    def run_59(self):
-        return 'module-59'
+    # quick sanity check for generated classes
+    print("SimulatedClass7.method_7():", globals()["SimulatedClass7"]().method_7())
+    print("ModuleLogic42.run_42():", globals()["ModuleLogic42"]().run_42())
