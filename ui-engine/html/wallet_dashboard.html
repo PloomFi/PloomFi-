@@ -1,13 +1,158 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Wallet Dashboard</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>CaddyX Wallet — Dashboard</title>
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Preload fonts if you have them (optional) -->
+  <!-- <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /> -->
 </head>
 <body>
-  <header><h1>CaddyX Wallet</h1></header>
-  <section id="balance"></section>
-  <section id="tx-history"></section>
-  <script src="popup.js"></script>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="app-header" role="banner">
+    <h1 class="app-title">CaddyX Wallet</h1>
+    <nav class="app-nav" aria-label="Primary">
+      <ul class="nav-list">
+        <li><a href="#balance-card">Balance</a></li>
+        <li><a href="#history-card">Transactions</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="main" class="app-main" role="main">
+    <!-- Balance -->
+    <section
+      id="balance-card"
+      class="card"
+      aria-labelledby="balance-title"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="card-header">
+        <h2 id="balance-title" class="card-title">Wallet Balance</h2>
+        <div class="card-actions">
+          <button id="btn-refresh" class="btn" type="button" aria-label="Refresh balance">
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div class="card-content">
+        <div id="balance" class="balance">
+          <div class="skeleton skeleton-lg" aria-hidden="true"></div>
+        </div>
+        <dl class="balance-meta">
+          <div>
+            <dt>Address</dt>
+            <dd id="wallet-address" class="mono">—</dd>
+          </div>
+          <div>
+            <dt>Network</dt>
+            <dd id="network">—</dd>
+          </div>
+          <div>
+            <dt>Updated</dt>
+            <dd id="last-updated">—</dd>
+          </div>
+        </dl>
+        <p id="balance-error" class="visually-hidden" role="alert"></p>
+      </div>
+    </section>
+
+    <!-- Transactions -->
+    <section
+      id="history-card"
+      class="card"
+      aria-labelledby="history-title"
+    >
+      <div class="card-header">
+        <h2 id="history-title" class="card-title">Transaction History</h2>
+        <div class="card-actions">
+          <label class="sr-only" for="filter-input">Filter by address or signature</label>
+          <input
+            id="filter-input"
+            class="input"
+            type="search"
+            placeholder="Filter…"
+            autocomplete="off"
+          />
+        </div>
+      </div>
+
+      <div id="tx-history" class="tx-list" aria-live="polite">
+        <!-- Loading skeleton -->
+        <div class="skeleton skeleton-row" aria-hidden="true"></div>
+        <div class="skeleton skeleton-row" aria-hidden="true"></div>
+        <div class="skeleton skeleton-row" aria-hidden="true"></div>
+      </div>
+
+      <!-- Empty state -->
+      <template id="empty-tx-template">
+        <div class="empty">
+          <p>No transactions found.</p>
+        </div>
+      </template>
+
+      <!-- Transaction item template -->
+      <template id="tx-item-template">
+        <article class="tx-item">
+          <header class="tx-head">
+            <span class="tx-type" data-tx-type>—</span>
+            <time class="tx-time" data-tx-time datetime="">—</time>
+          </header>
+          <dl class="tx-grid">
+            <div>
+              <dt>Signature</dt>
+              <dd><code class="mono" data-tx-sig>—</code></dd>
+            </div>
+            <div>
+              <dt>From</dt>
+              <dd class="mono" data-tx-from>—</dd>
+            </div>
+            <div>
+              <dt>To</dt>
+              <dd class="mono" data-tx-to>—</dd>
+            </div>
+            <div>
+              <dt>Amount</dt>
+              <dd data-tx-amount>—</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd data-tx-status>—</dd>
+            </div>
+          </dl>
+          <footer class="tx-foot">
+            <a class="link" target="_blank" rel="noopener noreferrer" data-tx-explorer href="#">
+              View on explorer
+            </a>
+          </footer>
+        </article>
+      </template>
+    </section>
+  </main>
+
+  <footer class="app-footer" role="contentinfo">
+    <p>&copy; <span id="year"></span> CaddyX Labs</p>
+  </footer>
+
+  <!-- App script -->
+  <script src="popup.js" defer></script>
+  <script>
+    // Small inline helper to set year and reduce layout shift
+    document.addEventListener("DOMContentLoaded", () => {
+      const y = document.getElementById("year");
+      if (y) y.textContent = String(new Date().getFullYear());
+    });
+  </script>
 </body>
 </html>
